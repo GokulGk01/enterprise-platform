@@ -80,8 +80,10 @@ jobs:
           docker push ${IMAGE}:${VERSION}
           docker push ${IMAGE}:stable
 
-      - name: Sign release image
+      - name: Install Cosign
         uses: sigstore/cosign-installer@v3
+
+      - name: Sign release image
         env:
           COSIGN_EXPERIMENTAL: "true"
         run: |
