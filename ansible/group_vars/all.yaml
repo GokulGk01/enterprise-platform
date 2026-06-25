@@ -1,0 +1,17 @@
+project_name: gk-enterprise-platform
+environment: dev
+aws_region: us-east-1
+aws_account_id: "884390772196"
+
+kubernetes_version: "1.29"
+cluster_name: "{{ project_name }}-{{ environment }}"
+container_runtime: containerd
+
+common_packages:
+  - curl
+  - wget
+  - git
+  - unzip
+  - jq
+
+log_level: info

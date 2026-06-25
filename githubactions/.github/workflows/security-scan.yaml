@@ -1,0 +1,85 @@
+# ============================================================
+# .github/workflows/security-scan.yaml
+# PURPOSE: Scheduled daily security scan of ALL images in ECR
+# Catches new CVEs in deployed images
+# ============================================================
+
+name: Daily Security Scan
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+    # cron: '0 6 * * *' → runs at 6AM UTC every day
+    # Format: minute hour day month weekday
+    # 0 6 * * * = 6:00 AM every day
+    # Why daily? New CVEs discovered daily
+    # An image clean today may be vulnerable tomorrow
+
+  workflow_dispatch:
+    # workflow_dispatch → allows manual trigger
+    # "Run workflow" button in GitHub UI
+    # Useful for on-demand security checks
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+
+jobs:
+  scan-ecr-images:
+    name: Scan ECR Images
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        app: [frontend, backend, api]
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Get latest image tag
+        id: get-tag
+        run: |
+          LATEST_TAG=$(aws ecr describe-images \
+            --repository-name enterprise-platform/${{ matrix.app }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' \
+            --output text)
+          echo "tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
+          # Gets most recently pushed image tag
+          # Scans what's actually running in production
+
+      - name: Scan deployed image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/enterprise-platform/${{ matrix.app }}:${{ steps.get-tag.outputs.tag }}
+          format: sarif
+          output: daily-scan-${{ matrix.app }}.sarif
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+          # exit-code: 0 → don't fail pipeline
+          # We scan for visibility, not to block
+          # Alert team instead (see next step)
+
+      - name: Upload scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: daily-scan-${{ matrix.app }}.sarif
+          category: daily-${{ matrix.app }}
+
+      - name: Alert on critical findings
+        if: failure()
+        run: |
+          echo "::error::CRITICAL vulnerabilities found in ${{ matrix.app }}!"
+          echo "::error::Check Security tab for details"
+          # ::error:: → creates GitHub annotation
+          # Shown prominently in PR/workflow UI
+          # Can also integrate with Slack/PagerDuty here

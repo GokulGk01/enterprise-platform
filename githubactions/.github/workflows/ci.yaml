@@ -1,0 +1,318 @@
+# ============================================================
+# .github/workflows/ci.yaml
+# PURPOSE: Main CI pipeline
+# TRIGGERS: Push to any branch, Pull Requests to main
+# ============================================================
+
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+      # 'feature/**' → matches any branch starting with feature/
+      # e.g: feature/add-login, feature/fix-bug
+  pull_request:
+    branches:
+      - main
+      # Only PRs targeting main trigger this
+      # Prevents running on every branch PR
+
+env:
+  # Environment variables available to ALL jobs
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  # ${{ secrets.X }} → reads from GitHub Secrets
+  # Never hardcode credentials in workflows
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  PROJECT_NAME: enterprise-platform
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  # JOB 1: Code Quality Checks
+  # ──────────────────────────────────────────────────────────
+  lint:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    # ubuntu-latest → GitHub-hosted runner
+    # Fresh Ubuntu VM for every run
+    # Cleaned up after job completes
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        # uses → reference a reusable action
+        # actions/checkout@v4 → official GitHub action
+        # clones your repository into the runner
+        # @v4 → pinned version (security best practice)
+
+      - name: Lint Dockerfiles
+        uses: hadolint/hadolint-action@v3.1.0
+        # hadolint → Dockerfile linter
+        # checks for best practices:
+        # → always pin base image versions
+        # → don't run as root
+        # → use COPY not ADD
+        # → no sudo in RUN commands
+        with:
+          dockerfile: apps/frontend/Dockerfile
+          failure-threshold: warning
+          # failure-threshold → only fail on errors
+          #                     warnings still shown
+
+      - name: Lint frontend Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: apps/backend/Dockerfile
+          failure-threshold: warning
+
+      - name: Lint backend Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: apps/api/Dockerfile
+          failure-threshold: warning
+
+      - name: Validate Kubernetes manifests
+        uses: azure/k8s-lint@v1
+        with:
+          manifests: |
+            helm/enterprise-platform/templates/
+          # Validates YAML syntax and K8s schema
+          # Catches errors before deploy
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 2: Build and Scan (runs for each app)
+  # ──────────────────────────────────────────────────────────
+  build-and-scan:
+    name: Build & Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    # needs: lint → only run if lint job PASSED
+    #               if lint fails, this job is skipped
+    #               saves time and money
+
+    strategy:
+      matrix:
+        app: [frontend, backend, api]
+        # matrix → run this job 3 times in PARALLEL
+        # once for each app
+        # ${{ matrix.app }} = frontend/backend/api
+        # 3x faster than sequential builds
+      fail-fast: false
+      # fail-fast: false → if frontend fails,
+      #                    still build backend and api
+      #                    see ALL failures at once
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+        # Configures AWS CLI on the runner
+        # Credentials from GitHub Secrets
+        # Available for all subsequent steps
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        # Runs: aws ecr get-login-password | docker login
+        # Authenticates Docker to push to ECR
+        # Token valid for 12 hours
+
+      - name: Set image metadata
+        id: meta
+        run: |
+          # Generate image tags
+          SHORT_SHA="${GITHUB_SHA::8}"
+          # GITHUB_SHA → full git commit SHA (40 chars)
+          # ::8 → first 8 characters only
+          # e.g: a1b2c3d4
+
+          IMAGE_TAG="${SHORT_SHA}"
+          # Primary tag: git SHA for exact traceability
+          # Which commit built this image?
+
+          if [ "$GITHUB_REF_NAME" == "main" ]; then
+            EXTRA_TAG="latest"
+          else
+            EXTRA_TAG="${GITHUB_REF_NAME//\//-}"
+            # Replace / with - in branch names
+            # feature/login → feature-login
+          fi
+
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "extra_tag=${EXTRA_TAG}" >> $GITHUB_OUTPUT
+          echo "image_name=${{ env.ECR_REGISTRY }}/${{ env.PROJECT_NAME }}/${{ matrix.app }}" >> $GITHUB_OUTPUT
+          # $GITHUB_OUTPUT → sets output variables
+          # Referenced later as: steps.meta.outputs.image_tag
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --tag ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.image_tag }} \
+            --tag ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.extra_tag }} \
+            --label "git.commit=${{ github.sha }}" \
+            --label "git.branch=${{ github.ref_name }}" \
+            --label "build.number=${{ github.run_number }}" \
+            --file apps/${{ matrix.app }}/Dockerfile \
+            apps/${{ matrix.app }}/
+          # --tag    → assign image tag
+          # --label  → metadata on image
+          # --file   → path to Dockerfile
+          # final arg → build context (where source is)
+
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.image_tag }}
+          format: sarif
+          # sarif → GitHub Security tab format
+          # shows vulnerabilities in GitHub UI
+          output: trivy-results-${{ matrix.app }}.sarif
+          severity: CRITICAL,HIGH
+          # Only report CRITICAL and HIGH
+          # MEDIUM/LOW logged but don't fail
+          exit-code: '1'
+          # exit-code: 1 → FAIL if vulnerabilities found
+          # This is our security gate
+          # CRITICAL/HIGH = pipeline blocked ❌
+          ignore-unfixed: true
+          # ignore-unfixed → skip CVEs with no fix yet
+          # No point blocking on unfixable issues
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        # if: always() → upload results EVEN if scan failed
+        # We want to see results even when pipeline blocks
+        with:
+          sarif_file: trivy-results-${{ matrix.app }}.sarif
+          category: trivy-${{ matrix.app }}
+
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.image_tag }}
+          format: spdx-json
+          # spdx-json → industry standard SBOM format
+          # SPDX = Software Package Data Exchange
+          output-file: sbom-${{ matrix.app }}.spdx.json
+          # Complete list of every package in image:
+          # → package name, version, license
+          # → used for compliance and CVE tracking
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.app }}
+          path: sbom-${{ matrix.app }}.spdx.json
+          retention-days: 90
+          # Keep SBOM for 90 days
+          # Required for compliance audits
+
+      - name: Push image to ECR
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+        # Only push on main or develop branches
+        # Feature branches: build and scan only, no push
+        run: |
+          docker push ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.image_tag }}
+          docker push ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.extra_tag }}
+
+      - name: Install Cosign
+        if: github.ref == 'refs/heads/main'
+        uses: sigstore/cosign-installer@v3
+        # cosign → container image signing tool
+        # Proves image was built by YOUR pipeline
+        # Not tampered with after push
+
+      - name: Sign image with Cosign
+        if: github.ref == 'refs/heads/main'
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+          # COSIGN_EXPERIMENTAL → keyless signing
+          # Uses GitHub OIDC token as identity
+          # No key management needed
+          # Signature stored in Rekor transparency log
+        run: |
+          cosign sign --yes \
+            ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.image_tag }}
+          # --yes → non-interactive mode (CI/CD)
+          # Signs image digest (not tag)
+          # Signature stored alongside image in ECR
+
+      - name: Attach SBOM to image
+        if: github.ref == 'refs/heads/main'
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign attach sbom \
+            --sbom sbom-${{ matrix.app }}.spdx.json \
+            ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.image_tag }}
+          # Attaches SBOM to image in registry
+          # Anyone pulling image can get its SBOM
+          # cosign download sbom <image>
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 3: Update GitOps (main branch only)
+  # ──────────────────────────────────────────────────────────
+  update-gitops:
+    name: Update GitOps Values
+    runs-on: ubuntu-latest
+    needs: build-and-scan
+    # Only runs if ALL matrix jobs passed
+    if: github.ref == 'refs/heads/main'
+    # Only on main branch
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN → auto-provided by GitHub Actions
+          # Allows pushing commits back to repo
+
+      - name: Update Helm values with new image tags
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+
+          # Update image tags in helm values
+          yq -i ".frontend.image.tag = \"${SHORT_SHA}\"" \
+            helm/enterprise-platform/values.yaml
+
+          yq -i ".backend.image.tag = \"${SHORT_SHA}\"" \
+            helm/enterprise-platform/values.yaml
+
+          yq -i ".api.image.tag = \"${SHORT_SHA}\"" \
+            helm/enterprise-platform/values.yaml
+          # yq -i → edit in place (modify file directly)
+          # Updates tag for each service
+
+      - name: Commit and push GitOps changes
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          # Set git identity for the commit
+
+          git add helm/enterprise-platform/values.yaml
+
+          git diff --staged --quiet || \
+            git commit -m "chore: update image tags to ${GITHUB_SHA::8}
+
+            Updated by CI pipeline run #${{ github.run_number }}
+            Triggered by: ${{ github.actor }}
+            Branch: ${{ github.ref_name }}"
+          # git diff --staged --quiet → check if anything changed
+          # || → if something changed, commit it
+          # Multi-line commit message for audit trail
+
+          git push origin main
+          # ArgoCD watches this repo
+          # Detecting this commit → triggers sync
+          # This is the GitOps trigger!

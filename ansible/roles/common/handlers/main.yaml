@@ -1,0 +1,4 @@
+---
+- name: Reload shell profile
+  ansible.builtin.shell:
+    cmd: source ~/.zshrc

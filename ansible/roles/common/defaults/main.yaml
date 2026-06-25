@@ -1,0 +1,16 @@
+# Tools to verify are installed
+required_tools:
+  - git
+  - curl
+  - jq
+  - aws
+  - kubectl
+  - helm
+  - terraform
+
+project_directories:
+  - "~/.kube"
+  - "~/.aws"
+  - "/tmp/gk-enterprise-platform"
+
+shell_profile: "~/.zshrc"
