@@ -14,7 +14,7 @@ config:
 
 services:
   frontend:
-    replicas: 1
+    replicas: 2
     # 1 replica in dev → save cost
     resources:
       requests:
