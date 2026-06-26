@@ -44,6 +44,6 @@ COPY --from=builder /app/api-server /api-server
 EXPOSE 9090
 
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-  CMD ["/api-server", "health"] || exit 1
+CMD ["/api-server", "health"] || exit 1
 
 CMD ["/api-server"]
