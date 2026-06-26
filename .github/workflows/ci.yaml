@@ -59,11 +59,14 @@ jobs:
           dockerfile: apps/api/Dockerfile
           failure-threshold: warning
 
-      - name: Validate Kubernetes manifests
-        uses: azure/k8s-lint@v1
+      - name: Install Helm
+        uses: azure/setup-helm@v3
         with:
-          manifests: |
-            helm/enterprise-platform/templates/
+          version: v3.12.0
+
+      - name: Lint Helm chart
+        run: |
+          helm lint helm/enterprise-platform/
 
 
 
