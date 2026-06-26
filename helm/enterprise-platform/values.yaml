@@ -30,8 +30,9 @@ services:
     port: 80
     serviceType: ClusterIP
     securityContext:
-      runAsUser: 101
-      fsGroup: 101
+      runAsNonRoot: false
+      runAsUser: 0
+      fsGroup: 0
     resources:
       requests:
         cpu: 100m

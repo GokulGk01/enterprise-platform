@@ -1,9 +1,3 @@
-# ============================================================
-# templates/deployment.yaml
-# PURPOSE: Deployments for all 3 services
-# Uses range to loop over services
-# ============================================================
-
 {{- range $name, $service := .Values.services }}
 ---
 apiVersion: apps/v1
@@ -14,27 +8,17 @@ metadata:
   labels:
     {{- include "enterprise-platform.labels" $ | nindent 4 }}
     app: {{ $name }}
-  annotations:
-    deployment.kubernetes.io/revision: "1"
-    # Track deployment revision for rollback
 spec:
   replicas: {{ $service.replicas }}
   selector:
     matchLabels:
       {{- include "enterprise-platform.selectorLabels" $ | nindent 6 }}
       app: {{ $name }}
-      # app label added to selectorLabels
-      # Differentiates frontend/backend/api pods
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxSurge: 1
-      # maxSurge → how many extra pods during update
-      # 1 → one extra pod created before old one removed
       maxUnavailable: 0
-      # maxUnavailable → how many pods can be down
-      # 0 → always keep full replica count running
-      # Zero-downtime deployments ✅
   template:
     metadata:
       labels:
@@ -42,17 +26,14 @@ spec:
         app: {{ $name }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
-        # checksum/config → hash of configmap content
-        # When configmap changes → checksum changes
-        # → pod automatically restarts
-        # Without this: pods keep old config until restart
     spec:
       serviceAccountName: {{ include "enterprise-platform.serviceAccountName" $ }}
       securityContext:
-        runAsNonRoot: true
+        runAsNonRoot: {{ $service.securityContext.runAsNonRoot }}
+        {{- if $service.securityContext.runAsUser }}
         runAsUser: {{ $service.securityContext.runAsUser }}
         fsGroup: {{ $service.securityContext.fsGroup }}
-
+        {{- end }}
       containers:
         - name: {{ $name }}
           image: "{{ $service.image.repository }}:{{ $service.image.tag }}"
@@ -64,9 +45,6 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "enterprise-platform.fullname" $ }}-config
-            # envFrom → inject ALL configmap keys as env vars
-            # Alternative to env: with individual key mapping
-            # Simpler for many config values
           env:
             - name: APP_VERSION
               value: {{ $service.image.tag | quote }}
@@ -76,9 +54,6 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-                  # fieldRef → reads pod metadata at runtime
-                  # metadata.name → actual pod name
-                  # Useful for logging (which pod logged this?)
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:
@@ -88,49 +63,27 @@ spec:
               path: /health
               port: http
             initialDelaySeconds: 30
-            # initialDelaySeconds → wait before first check
-            # Give app time to start up
             periodSeconds: 10
-            # periodSeconds → check every 10 seconds
             failureThreshold: 3
-            # failureThreshold → restart after 3 failures
           readinessProbe:
             httpGet:
               path: /health
               port: http
             initialDelaySeconds: 5
-            # readinessProbe → is pod ready for traffic?
-            # Different from liveness:
-            # liveness   → is pod alive? (restart if not)
-            # readiness  → should pod receive traffic?
-            #              (remove from LB if not ready)
             periodSeconds: 5
             failureThreshold: 3
           resources:
             requests:
               cpu: {{ $service.resources.requests.cpu }}
               memory: {{ $service.resources.requests.memory }}
-              # requests → guaranteed resources
-              # Kubernetes scheduler uses this for placement
             limits:
               cpu: {{ $service.resources.limits.cpu }}
               memory: {{ $service.resources.limits.memory }}
-              # limits → maximum resources allowed
-              # Exceeding memory limit → OOMKilled
-              # Exceeding CPU limit → throttled (not killed)
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-              # Mount /tmp as writable volume
-              # Needed when running as read-only root fs
       volumes:
         - name: tmp
           emptyDir: {}
-          # emptyDir → temporary directory
-          # Lives as long as pod lives
-          # Cleared on pod restart
       terminationGracePeriodSeconds: 30
-      # terminationGracePeriodSeconds → how long to wait
-      # for pod to shutdown gracefully before force killing
-      # 30 seconds to finish in-flight requests
 {{- end }}
