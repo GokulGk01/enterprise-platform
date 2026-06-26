@@ -32,8 +32,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Create non-root user
-RUN groupadd -g 1001 appgroup && \
-    useradd -u 1001 -g appgroup -s /bin/false appuser
+RUN groupadd -g 1001 appgroup && useradd -u 1001 -g appgroup -s /bin/false appuser
 # groupadd/useradd → Linux (not alpine) syntax
 # -s /bin/false → no shell login (security)
 
@@ -50,7 +49,6 @@ EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD python -c "import urllib.request; \
-  urllib.request.urlopen('http://localhost:8080/health')" \
-  || exit 1
+  urllib.request.urlopen('http://localhost:8080/health')" || exit 1
 
 CMD ["python", "app.py"]
