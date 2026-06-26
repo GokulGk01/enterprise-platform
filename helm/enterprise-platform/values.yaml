@@ -6,25 +6,20 @@ global:
   environment: dev
   project: enterprise-platform
   registry: 884390772196.dkr.ecr.us-east-1.amazonaws.com
-
 namespace:
   create: true
   name: enterprise-platform
-
 serviceAccount:
   create: true
   name: enterprise-platform
   annotations: {}
-
 imagePullSecrets: []
-
 config:
   logLevel: info
   frontendUrl: "http://localhost:80"
   backendUrl: "http://localhost:8080"
   apiUrl: "http://localhost:9090"
   extraConfig: {}
-
 services:
   frontend:
     image:
@@ -50,7 +45,6 @@ services:
       maxReplicas: 5
       targetCPUUtilizationPercentage: 70
       targetMemoryUtilizationPercentage: 80
-
   backend:
     image:
       repository: 884390772196.dkr.ecr.us-east-1.amazonaws.com/enterprise-platform/backend
@@ -75,7 +69,6 @@ services:
       maxReplicas: 8
       targetCPUUtilizationPercentage: 70
       targetMemoryUtilizationPercentage: 80
-
   api:
     image:
       repository: 884390772196.dkr.ecr.us-east-1.amazonaws.com/enterprise-platform/api
@@ -100,7 +93,6 @@ services:
       maxReplicas: 6
       targetCPUUtilizationPercentage: 70
       targetMemoryUtilizationPercentage: 80
-
 ingress:
   enabled: false
   host: enterprise-platform.example.com
@@ -109,6 +101,14 @@ ingress:
     enabled: false
     certificateArn: ""
     secretName: enterprise-platform-tls
-
 nameOverride: ""
 fullnameOverride: ""
+frontend:
+  image:
+    tag: 7850f6d7
+backend:
+  image:
+    tag: 7850f6d7
+api:
+  image:
+    tag: 7850f6d7
