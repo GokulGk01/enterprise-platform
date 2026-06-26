@@ -1,0 +1,46 @@
+# ============================================================
+# templates/hpa.yaml
+# PURPOSE: HorizontalPodAutoscaler for each service
+# Scales pods based on CPU/memory usage
+# ============================================================
+
+{{- range $name, $service := .Values.services }}
+{{- if $service.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "enterprise-platform.fullname" $ }}-{{ $name }}
+  namespace: {{ $.Values.namespace.name }}
+  labels:
+    {{- include "enterprise-platform.labels" $ | nindent 4 }}
+    app: {{ $name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "enterprise-platform.fullname" $ }}-{{ $name }}
+    # scaleTargetRef → which Deployment to scale
+  minReplicas: {{ $service.autoscaling.minReplicas }}
+  # minReplicas → never scale below this
+  maxReplicas: {{ $service.autoscaling.maxReplicas }}
+  # maxReplicas → never scale above this
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $service.autoscaling.targetCPUUtilizationPercentage }}
+          # averageUtilization → scale when average CPU
+          # across all pods exceeds this %
+          # 70 → scale up when pods average 70% CPU
+          # scale down when below this for 5 minutes
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $service.autoscaling.targetMemoryUtilizationPercentage }}
+{{- end }}
+{{- end }}

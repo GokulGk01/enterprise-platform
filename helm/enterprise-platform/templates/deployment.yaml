@@ -1,95 +1,136 @@
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: {{ .Release.Name }}-frontend
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app: frontend
-    environment: {{ .Values.global.environment }}
-spec:
-  replicas: {{ .Values.frontend.replicas }}
-  selector:
-    matchLabels:
-      app: frontend
-  template:
-    metadata:
-      labels:
-        app: frontend
-    spec:
-      containers:
-        - name: frontend
-          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
-          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
-          ports:
-            - containerPort: {{ .Values.frontend.port }}
-          resources:
-            requests:
-              cpu: {{ .Values.frontend.resources.requests.cpu }}
-              memory: {{ .Values.frontend.resources.requests.memory }}
-            limits:
-              cpu: {{ .Values.frontend.resources.limits.cpu }}
-              memory: {{ .Values.frontend.resources.limits.memory }}
+# ============================================================
+# templates/deployment.yaml
+# PURPOSE: Deployments for all 3 services
+# Uses range to loop over services
+# ============================================================
+
+{{- range $name, $service := .Values.services }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-backend
-  namespace: {{ .Release.Namespace }}
+  name: {{ include "enterprise-platform.fullname" $ }}-{{ $name }}
+  namespace: {{ $.Values.namespace.name }}
   labels:
-    app: backend
-    environment: {{ .Values.global.environment }}
+    {{- include "enterprise-platform.labels" $ | nindent 4 }}
+    app: {{ $name }}
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    # Track deployment revision for rollback
 spec:
-  replicas: {{ .Values.backend.replicas }}
+  replicas: {{ $service.replicas }}
   selector:
     matchLabels:
-      app: backend
+      {{- include "enterprise-platform.selectorLabels" $ | nindent 6 }}
+      app: {{ $name }}
+      # app label added to selectorLabels
+      # Differentiates frontend/backend/api pods
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      # maxSurge → how many extra pods during update
+      # 1 → one extra pod created before old one removed
+      maxUnavailable: 0
+      # maxUnavailable → how many pods can be down
+      # 0 → always keep full replica count running
+      # Zero-downtime deployments ✅
   template:
     metadata:
       labels:
-        app: backend
+        {{- include "enterprise-platform.selectorLabels" $ | nindent 8 }}
+        app: {{ $name }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+        # checksum/config → hash of configmap content
+        # When configmap changes → checksum changes
+        # → pod automatically restarts
+        # Without this: pods keep old config until restart
     spec:
+      serviceAccountName: {{ include "enterprise-platform.serviceAccountName" $ }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $service.securityContext.runAsUser }}
+        fsGroup: {{ $service.securityContext.fsGroup }}
+
       containers:
-        - name: backend
-          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
-          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+        - name: {{ $name }}
+          image: "{{ $service.image.repository }}:{{ $service.image.tag }}"
+          imagePullPolicy: {{ $service.image.pullPolicy }}
           ports:
-            - containerPort: {{ .Values.backend.port }}
+            - name: http
+              containerPort: {{ $service.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "enterprise-platform.fullname" $ }}-config
+            # envFrom → inject ALL configmap keys as env vars
+            # Alternative to env: with individual key mapping
+            # Simpler for many config values
+          env:
+            - name: APP_VERSION
+              value: {{ $service.image.tag | quote }}
+            - name: SERVICE_NAME
+              value: {{ $name | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+                  # fieldRef → reads pod metadata at runtime
+                  # metadata.name → actual pod name
+                  # Useful for logging (which pod logged this?)
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            # initialDelaySeconds → wait before first check
+            # Give app time to start up
+            periodSeconds: 10
+            # periodSeconds → check every 10 seconds
+            failureThreshold: 3
+            # failureThreshold → restart after 3 failures
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            # readinessProbe → is pod ready for traffic?
+            # Different from liveness:
+            # liveness   → is pod alive? (restart if not)
+            # readiness  → should pod receive traffic?
+            #              (remove from LB if not ready)
+            periodSeconds: 5
+            failureThreshold: 3
           resources:
             requests:
-              cpu: {{ .Values.backend.resources.requests.cpu }}
-              memory: {{ .Values.backend.resources.requests.memory }}
+              cpu: {{ $service.resources.requests.cpu }}
+              memory: {{ $service.resources.requests.memory }}
+              # requests → guaranteed resources
+              # Kubernetes scheduler uses this for placement
             limits:
-              cpu: {{ .Values.backend.resources.limits.cpu }}
-              memory: {{ .Values.backend.resources.limits.memory }}
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: {{ .Release.Name }}-api
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app: api
-    environment: {{ .Values.global.environment }}
-spec:
-  replicas: {{ .Values.api.replicas }}
-  selector:
-    matchLabels:
-      app: api
-  template:
-    metadata:
-      labels:
-        app: api
-    spec:
-      containers:
-        - name: api
-          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
-          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
-          ports:
-            - containerPort: {{ .Values.api.port }}
-          resources:
-            requests:
-              cpu: {{ .Values.api.resources.requests.cpu }}
-              memory: {{ .Values.api.resources.requests.memory }}
-            limits:
-              cpu: {{ .Values.api.resources.limits.cpu }}
-              memory: {{ .Values.api.resources.limits.memory }}
+              cpu: {{ $service.resources.limits.cpu }}
+              memory: {{ $service.resources.limits.memory }}
+              # limits → maximum resources allowed
+              # Exceeding memory limit → OOMKilled
+              # Exceeding CPU limit → throttled (not killed)
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+              # Mount /tmp as writable volume
+              # Needed when running as read-only root fs
+      volumes:
+        - name: tmp
+          emptyDir: {}
+          # emptyDir → temporary directory
+          # Lives as long as pod lives
+          # Cleared on pod restart
+      terminationGracePeriodSeconds: 30
+      # terminationGracePeriodSeconds → how long to wait
+      # for pod to shutdown gracefully before force killing
+      # 30 seconds to finish in-flight requests
+{{- end }}

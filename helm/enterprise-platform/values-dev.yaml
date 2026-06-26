@@ -1,0 +1,52 @@
+# ============================================================
+# values-dev.yaml
+# PURPOSE: Development environment overrides
+# Usage: helm install ... -f values.yaml -f values-dev.yaml
+# These values OVERRIDE matching keys in values.yaml
+# ============================================================
+
+global:
+  environment: dev
+
+config:
+  logLevel: debug
+  # debug → verbose logging in dev
+
+services:
+  frontend:
+    replicas: 1
+    # 1 replica in dev → save cost
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    autoscaling:
+      enabled: false
+      # No autoscaling in dev → stable testing
+
+  backend:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+    autoscaling:
+      enabled: false
+
+  api:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 25m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+    autoscaling:
+      enabled: false

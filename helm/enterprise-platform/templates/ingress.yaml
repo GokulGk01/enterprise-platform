@@ -1,0 +1,74 @@
+# ============================================================
+# templates/ingress.yaml
+# PURPOSE: Ingress for external traffic routing
+# Used in Module 7 (TLS + cert-manager)
+# ============================================================
+
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "enterprise-platform.fullname" . }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "enterprise-platform.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: alb
+    # alb → use AWS Application Load Balancer
+    # Handled by AWS LB Controller (installed Module 3)
+
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # internet-facing → public ALB (in public subnets)
+    # internal        → private ALB (in private subnets)
+
+    alb.ingress.kubernetes.io/target-type: ip
+    # ip → routes directly to pod IPs (faster)
+    # instance → routes to node IPs then iptables
+
+    {{- if .Values.ingress.tls.enabled }}
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.tls.certificateArn }}
+    # certificate-arn → ACM certificate for HTTPS
+    # Added in Module 7 (TLS)
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    # Redirect HTTP → HTTPS automatically
+    {{- end }}
+
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "enterprise-platform.fullname" . }}-frontend
+                port:
+                  name: http
+
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "enterprise-platform.fullname" . }}-backend
+                port:
+                  name: http
+
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "enterprise-platform.fullname" . }}-api
+                port:
+                  name: http
+
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+{{- end }}

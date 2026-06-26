@@ -1,6 +1,18 @@
 apiVersion: v2
 name: enterprise-platform
-description: Enterprise DevOps Platform Helm Chart
+description: Enterprise DevOps & SRE Platform Deploys frontend, backend, and API services
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
+
+keywords:
+  - enterprise
+  - devops
+  - sre
+  - microservices
+
+maintainers:
+  - name: Gokul
+    email: gokul@enterprise-platform.com
+
+dependencies: []

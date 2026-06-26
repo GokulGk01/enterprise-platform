@@ -1,0 +1,16 @@
+# ============================================================
+# templates/namespace.yaml
+# PURPOSE: Create namespace for our application
+# ============================================================
+
+{{- if .Values.namespace.create }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespace.name }}
+  labels:
+    {{- include "enterprise-platform.labels" . | nindent 4 }}
+    # nindent 4 → indent 4 spaces AND add leading newline
+    # Required because include returns a string
+    # without leading newline
+{{- end }}

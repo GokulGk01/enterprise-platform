@@ -1,0 +1,25 @@
+# Common version control
+.git/
+.gitignore
+
+# CI/CD files
+.github/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+tests/
+*_test.yaml
+
+# Secrets (never package these)
+secrets.yaml
+*-secret.yaml
+*.env

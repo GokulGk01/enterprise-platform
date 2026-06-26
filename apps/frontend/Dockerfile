@@ -5,30 +5,29 @@
 
 # Stage 1: Build stage
 FROM node:24-alpine AS builder
-# node:24-alpine → small Node.js image (~50MB)
-# alpine         → minimal Linux (5MB base)
-# AS builder     → names this stage "builder"
-#                  referenced in stage 2
 
 WORKDIR /app
-# WORKDIR → sets working directory
-#           creates it if doesn't exist
-#           all subsequent commands run here
 
 COPY src/ .
-# COPY src/ . → copy src/ from host into /app in container
-# . → current directory (WORKDIR = /app)
 
 # Stage 2: Production stage
 FROM nginx:1.25-alpine
-# Start fresh from nginx image
-# NOTHING from builder stage carried over automatically
-# Only what we explicitly COPY --from=builder
 
 LABEL maintainer="enterprise-platform"
-LABEL version="1.0.0"
 # LABEL → metadata (shown in docker inspect)
 # good practice for tracking
+RUN mkdir -p /var/cache/nginx/client_temp \
+  /var/cache/nginx/proxy_temp \
+  /var/cache/nginx/fastcgi_temp \
+  /var/cache/nginx/uwsgi_temp \
+  /var/cache/nginx/scgi_temp && \
+    chown -R nginx:nginx \
+      /var/cache/nginx \
+      /var/log/nginx \
+      /etc/nginx/conf.d && \
+    chmod -R 755 /var/cache/nginx && \
+    touch /var/run/nginx.pid && \
+    chown nginx:nginx /var/run/nginx.pid
 
 # Copy built files from builder stage
 COPY --from=builder /app /usr/share/nginx/html
@@ -39,18 +38,7 @@ COPY --from=builder /app /usr/share/nginx/html
 
 # Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Create non-root user for security
-RUN addgroup -g 1001 -S appgroup && \
-    adduser -u 1001 -S appuser -G appgroup
-# addgroup → create group (alpine syntax)
-# adduser  → create user in that group
-# -S       → system user (no password, no shell)
-# -g 1001  → group ID (non-root)
-# -u 1001  → user ID (non-root)
-# Why? Running as root in container is a security risk
-#      if container is compromised, attacker gets root
-
+USER nginx
 EXPOSE 80
 # EXPOSE → documents which port app listens on
 #          doesn't actually open port

@@ -1,0 +1,69 @@
+# ============================================================
+# values-prod.yaml
+# PURPOSE: Production environment overrides
+# Higher replicas, resources, and autoscaling limits
+# ============================================================
+
+global:
+  environment: prod
+
+config:
+  logLevel: warn
+  # warn → less verbose in production
+  frontendUrl: "https://enterprise-platform.example.com"
+  backendUrl: "https://api.enterprise-platform.example.com"
+  apiUrl: "https://api.enterprise-platform.example.com/v1"
+
+ingress:
+  enabled: true
+  host: enterprise-platform.example.com
+  tls:
+    enabled: true
+    # certificateArn set via --set flag
+    # Never hardcode ARN in values files
+
+services:
+  frontend:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 20
+      targetCPUUtilizationPercentage: 60
+
+  backend:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 30
+      targetCPUUtilizationPercentage: 60
+
+  api:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 20
+      targetCPUUtilizationPercentage: 60
