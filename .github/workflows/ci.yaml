@@ -36,39 +36,24 @@ jobs:
   lint:
     name: Code Quality
     runs-on: ubuntu-latest
-    # ubuntu-latest → GitHub-hosted runner
-    # Fresh Ubuntu VM for every run
-    # Cleaned up after job completes
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        # uses → reference a reusable action
-        # actions/checkout@v4 → official GitHub action
-        # clones your repository into the runner
-        # @v4 → pinned version (security best practice)
 
-      - name: Lint Dockerfiles
+      - name: Lint frontend Dockerfile
         uses: hadolint/hadolint-action@v3.1.0
-        # hadolint → Dockerfile linter
-        # checks for best practices:
-        # → always pin base image versions
-        # → don't run as root
-        # → use COPY not ADD
-        # → no sudo in RUN commands
         with:
           dockerfile: apps/frontend/Dockerfile
           failure-threshold: warning
-          # failure-threshold → only fail on errors
-          #                     warnings still shown
 
-      - name: Lint frontend Dockerfile
+      - name: Lint backend Dockerfile
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: apps/backend/Dockerfile
           failure-threshold: warning
 
-      - name: Lint backend Dockerfile
+      - name: Lint api Dockerfile
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: apps/api/Dockerfile
@@ -79,8 +64,8 @@ jobs:
         with:
           manifests: |
             helm/enterprise-platform/templates/
-          # Validates YAML syntax and K8s schema
-          # Catches errors before deploy
+
+
 
   # ──────────────────────────────────────────────────────────
   # JOB 2: Build and Scan (runs for each app)
