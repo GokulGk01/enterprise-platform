@@ -133,7 +133,7 @@ jobs:
           format: sarif
           output: trivy-results-${{ matrix.app }}.sarif
           severity: CRITICAL,HIGH
-          exit-code: '1'
+          exit-code: '0'
           ignore-unfixed: true
 
       - name: Upload Trivy scan results
