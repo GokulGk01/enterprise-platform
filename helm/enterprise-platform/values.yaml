@@ -106,10 +106,10 @@ nameOverride: ""
 fullnameOverride: ""
 frontend:
   image:
-    tag: 68a8e4c5
+    tag: ab4ae430
 backend:
   image:
-    tag: 68a8e4c5
+    tag: ab4ae430
 api:
   image:
-    tag: 68a8e4c5
+    tag: ab4ae430
