@@ -4,8 +4,8 @@
 # ============================================================
 
 # Stage 1: Build stage
-FROM node:20-alpine AS builder
-# node:20-alpine → small Node.js image (~50MB)
+FROM node:24-alpine AS builder
+# node:24-alpine → small Node.js image (~50MB)
 # alpine         → minimal Linux (5MB base)
 # AS builder     → names this stage "builder"
 #                  referenced in stage 2
