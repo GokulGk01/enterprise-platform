@@ -1,0 +1,104 @@
+# ============================================================
+# argocd/apps/enterprise-platform-app.yaml
+# PURPOSE: ArgoCD Application for our platform
+# This is the CORE of GitOps — connects Git to cluster
+# ============================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: enterprise-platform
+  namespace: argocd
+  # All ArgoCD Applications live in argocd namespace
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+    # finalizer → when app deleted, also delete K8s resources
+    # Prevents orphaned resources in cluster
+  labels:
+    app: enterprise-platform
+    managed-by: argocd
+spec:
+  project: enterprise-platform
+  # project → which ArgoCD Project this belongs to
+  # Must match AppProject name above
+
+  source:
+    repoURL: https://github.com/GokulGK01/enterprise-platform.git
+    # repoURL → where to get manifests from
+    # ArgoCD clones this repo every 3 minutes
+
+    targetRevision: main
+    # targetRevision → which branch/tag/commit to use
+    # main → always deploy latest from main branch
+    # For production: use specific tag (v1.0.0)
+
+    path: helm/enterprise-platform
+    # path → folder inside repo containing the chart
+    # ArgoCD looks here for Chart.yaml
+
+    helm:
+      # helm → tells ArgoCD this is a Helm chart
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+        # valueFiles → which values files to use
+        # Applied in order (dev overrides base)
+        # Same as: helm install -f values.yaml -f values-dev.yaml
+
+      parameters:
+        - name: global.environment
+          value: dev
+        # parameters → override specific values
+        # Same as: helm install --set global.environment=dev
+
+  destination:
+    server: https://kubernetes.default.svc
+    # server → which cluster to deploy to
+    # kubernetes.default.svc → same cluster ArgoCD runs in
+    # For multi-cluster: use external cluster URL
+
+    namespace: enterprise-platform
+    # namespace → deploy resources here
+
+  syncPolicy:
+    automated:
+      prune: true
+      # prune → delete resources removed from Git
+      # e.g: if you delete a Service from values.yaml
+      # ArgoCD deletes it from cluster too
+      # Without prune: orphaned resources accumulate
+
+      selfHeal: true
+      # selfHeal → if someone manually changes cluster
+      # ArgoCD reverts it back to Git state
+      # CRITICAL for GitOps: Git is always source of truth
+      # Manual kubectl changes get auto-reverted!
+
+    syncOptions:
+      - CreateNamespace=true
+      # CreateNamespace → create namespace if missing
+      # Same as: kubectl create namespace enterprise-platform
+
+      - PrunePropagationPolicy=foreground
+      # foreground → wait for child resources to delete
+      # before deleting parent
+
+      - PruneLast=true
+      # PruneLast → delete old resources AFTER
+      # new ones are running (safer upgrades)
+
+    retry:
+      limit: 5
+      # limit → retry sync up to 5 times on failure
+      backoff:
+        duration: 5s
+        # duration → wait 5 seconds between retries
+        factor: 2
+        # factor → double wait time each retry
+        # retry 1: 5s, retry 2: 10s, retry 3: 20s...
+        maxDuration: 3m
+        # maxDuration → never wait more than 3 minutes
+
+  revisionHistoryLimit: 10
+  # revisionHistoryLimit → keep last 10 deployments
+  # visible in ArgoCD UI for rollback

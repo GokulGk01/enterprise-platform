@@ -1,0 +1,22 @@
+# ============================================================
+# argocd/repositories/enterprise-platform-repo.yaml
+# PURPOSE: Register GitHub repo with ArgoCD
+# ============================================================
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: enterprise-platform-repo
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+    # This label tells ArgoCD this Secret is a repo config
+    # ArgoCD watches for secrets with this label
+type: Opaque
+stringData:
+  type: git
+  url: https://github.com/GokulGK01/enterprise-platform.git
+  # For public repos: no credentials needed
+  # For private repos: add username and password/token:
+  # username: GokulGK01
+  # password: <github-token>

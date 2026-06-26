@@ -1,0 +1,45 @@
+# ============================================================
+# argocd/apps/app-of-apps.yaml
+# PURPOSE: Root application that manages ALL other apps
+# The App of Apps pattern
+# ============================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: enterprise-platform
+
+  source:
+    repoURL: https://github.com/GokulGK01/enterprise-platform.git
+    targetRevision: main
+    path: argocd/apps
+    # path → watches the argocd/apps/ directory
+    # Any .yaml file added here = new ArgoCD Application
+    # Adding new microservice = add one file here
+    # No ArgoCD CLI needed!
+
+    directory:
+      recurse: false
+      # recurse → don't go into subdirectories
+      # only process files directly in argocd/apps/
+      include: "*.yaml"
+      # include → only process yaml files
+      exclude: "app-of-apps.yaml"
+      # exclude → don't process itself (infinite loop!)
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+    # namespace → ArgoCD Applications go in argocd ns
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

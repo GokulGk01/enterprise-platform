@@ -1,0 +1,75 @@
+# ============================================================
+# argocd/projects/enterprise-platform.yaml
+# PURPOSE: ArgoCD Project — groups apps and sets boundaries
+# ============================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: enterprise-platform
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+    # finalizer → prevents accidental deletion
+    # must delete all apps in project first
+spec:
+  description: Enterprise Platform Project
+
+  sourceRepos:
+    - "https://github.com/GokulGK01/enterprise-platform.git"
+    # sourceRepos → which Git repos are allowed
+    # Only our repo can deploy to this project
+    # Security: prevents other repos from deploying here
+
+  destinations:
+    - namespace: enterprise-platform
+      server: https://kubernetes.default.svc
+      # destinations → where apps can deploy TO
+      # kubernetes.default.svc → in-cluster API server
+      # namespace → only enterprise-platform namespace
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+      # Allow creating Namespaces (cluster-scoped resource)
+      # By default projects can only manage namespaced resources
+
+  namespaceResourceWhitelist:
+    - group: "apps"
+      kind: Deployment
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: ServiceAccount
+    - group: "networking.k8s.io"
+      kind: Ingress
+    - group: "autoscaling"
+      kind: HorizontalPodAutoscaler
+    # Whitelist → ONLY these resource types allowed
+    # Security: prevents deploying ClusterRoles etc
+    # without explicit permission
+
+  roles:
+    - name: developer
+      description: Developer access — sync only
+      policies:
+        - p, proj:enterprise-platform:developer,
+          applications, sync,
+          enterprise-platform/*, allow
+        - p, proj:enterprise-platform:developer,
+          applications, get,
+          enterprise-platform/*, allow
+      # developers can sync and view apps
+      # but cannot create/delete apps
+
+    - name: admin
+      description: Full admin access
+      policies:
+        - p, proj:enterprise-platform:admin,
+          applications, *,
+          enterprise-platform/*, allow
+      # admins can do everything in this project
