@@ -1,82 +1,23 @@
 # ============================================================
 # values.yaml
-# PURPOSE: Default values for ALL environments
-# Override with: -f values-dev.yaml or -f values-prod.yaml
 # ============================================================
 
-# ── Global Settings ────────────────────────────────────────
 global:
   environment: dev
   project: enterprise-platform
   registry: 884390772196.dkr.ecr.us-east-1.amazonaws.com
-<<<<<<< HEAD
-# Frontend service
-frontend:
-  image:
-    repository: 884390772196.dkr.ecr.us-east-1.amazonaws.com/enterprise-platform/frontend
-    tag: dd281f28
-    # ↑ CI/CD pipeline updates this tag on every merge to main
-    pullPolicy: Always
-  replicas: 2
-  port: 80
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      cpu: 200m
-      memory: 256Mi
-# Backend service
-backend:
-  image:
-    repository: 884390772196.dkr.ecr.us-east-1.amazonaws.com/enterprise-platform/backend
-    tag: dd281f28
-    pullPolicy: Always
-  replicas: 2
-  port: 8080
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
-# API service
-api:
-  image:
-    repository: 884390772196.dkr.ecr.us-east-1.amazonaws.com/enterprise-platform/api
-    tag: dd281f28
-    pullPolicy: Always
-  replicas: 2
-  port: 9090
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-    limits:
-      cpu: 200m
-      memory: 128Mi
-=======
 
-# ── Namespace ──────────────────────────────────────────────
 namespace:
   create: true
   name: enterprise-platform
 
-# ── Service Account ────────────────────────────────────────
 serviceAccount:
   create: true
   name: enterprise-platform
   annotations: {}
-  # Vault IRSA annotation added in Module 12:
-  # eks.amazonaws.com/role-arn: arn:aws:iam::884390772196:role/...
 
-# ── Image Pull Secrets ─────────────────────────────────────
 imagePullSecrets: []
-# ECR uses IAM auth so no pull secrets needed
-# Node role has ECR read permission (Module 3)
 
-# ── Application Config ─────────────────────────────────────
 config:
   logLevel: info
   frontendUrl: "http://localhost:80"
@@ -84,9 +25,6 @@ config:
   apiUrl: "http://localhost:9090"
   extraConfig: {}
 
-# ── Services ───────────────────────────────────────────────
-# Each service has identical structure
-# range loop in templates iterates over this map
 services:
   frontend:
     image:
@@ -98,7 +36,6 @@ services:
     serviceType: ClusterIP
     securityContext:
       runAsUser: 101
-      # 101 → nginx user UID in nginx:alpine
       fsGroup: 101
     resources:
       requests:
@@ -124,7 +61,6 @@ services:
     serviceType: ClusterIP
     securityContext:
       runAsUser: 1001
-      # 1001 → appuser UID from backend Dockerfile
       fsGroup: 1001
     resources:
       requests:
@@ -150,7 +86,6 @@ services:
     serviceType: ClusterIP
     securityContext:
       runAsUser: 1001
-      # 1001 → appuser UID from api Dockerfile
       fsGroup: 1001
     resources:
       requests:
@@ -166,10 +101,8 @@ services:
       targetCPUUtilizationPercentage: 70
       targetMemoryUtilizationPercentage: 80
 
-# ── Ingress ────────────────────────────────────────────────
 ingress:
   enabled: false
-  # Enabled in Module 7 (TLS + cert-manager)
   host: enterprise-platform.example.com
   annotations: {}
   tls:
@@ -177,7 +110,5 @@ ingress:
     certificateArn: ""
     secretName: enterprise-platform-tls
 
-# ── Name Overrides ─────────────────────────────────────────
 nameOverride: ""
 fullnameOverride: ""
->>>>>>> 5cbe259 (all fix done)
