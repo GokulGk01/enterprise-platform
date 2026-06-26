@@ -7,6 +7,11 @@ FROM python:3.13-slim AS builder
 
 WORKDIR /app
 
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY src/requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
@@ -17,6 +22,12 @@ COPY src/ .
 FROM python:3.13-slim
 
 WORKDIR /app
+
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 
 RUN groupadd -g 1001 appgroup && useradd -u 1001 -g appgroup -s /bin/false appuser
 
