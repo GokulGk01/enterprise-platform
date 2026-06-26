@@ -9,12 +9,11 @@ global:
   environment: dev
   project: enterprise-platform
   registry: 884390772196.dkr.ecr.us-east-1.amazonaws.com
-
 # Frontend service
 frontend:
   image:
     repository: 884390772196.dkr.ecr.us-east-1.amazonaws.com/enterprise-platform/frontend
-    tag: latest
+    tag: dd281f28
     # ↑ CI/CD pipeline updates this tag on every merge to main
     pullPolicy: Always
   replicas: 2
@@ -26,12 +25,11 @@ frontend:
     limits:
       cpu: 200m
       memory: 256Mi
-
 # Backend service
 backend:
   image:
     repository: 884390772196.dkr.ecr.us-east-1.amazonaws.com/enterprise-platform/backend
-    tag: latest
+    tag: dd281f28
     pullPolicy: Always
   replicas: 2
   port: 8080
@@ -42,12 +40,11 @@ backend:
     limits:
       cpu: 500m
       memory: 512Mi
-
 # API service
 api:
   image:
     repository: 884390772196.dkr.ecr.us-east-1.amazonaws.com/enterprise-platform/api
-    tag: latest
+    tag: dd281f28
     pullPolicy: Always
   replicas: 2
   port: 9090
