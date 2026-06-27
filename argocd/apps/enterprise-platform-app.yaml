@@ -1,26 +1,39 @@
 apiVersion: argoproj.io/v1alpha1
-kind: AppProject
+kind: Application
 metadata:
   name: enterprise-platform
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app: enterprise-platform
+    managed-by: argocd
 spec:
-  description: Enterprise Platform Project
+  project: enterprise-platform
 
-  sourceRepos:
-    - "*"
+  source:
+    repoURL: https://github.com/GokulGK01/enterprise-platform.git
+    targetRevision: main
+    path: helm/enterprise-platform
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
 
-  destinations:
-    - namespace: "*"
-      server: "*"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: enterprise-platform
 
-  clusterResourceWhitelist:
-    - group: "*"
-      kind: "*"
-    # Allow ALL cluster resources
-    # includes argoproj.io/Application
-    # Simplest fix — restrict later in production
-
-  namespaceResourceWhitelist:
-    - group: "*"
-      kind: "*"
-    # Allow ALL namespace resources
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
