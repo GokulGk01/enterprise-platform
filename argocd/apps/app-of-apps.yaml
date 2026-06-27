@@ -16,9 +16,6 @@ spec:
       recurse: false
       jsonnet: {}
       include: "enterprise-platform-app.yaml"
-      # Include ONLY specific files
-      # More reliable than exclude pattern
-      # Add each app file explicitly
 
   destination:
     server: https://kubernetes.default.svc
