@@ -106,10 +106,10 @@ nameOverride: ""
 fullnameOverride: ""
 frontend:
   image:
-    tag: 705cd7aa
+    tag: ecb62045
 backend:
   image:
-    tag: 705cd7aa
+    tag: ecb62045
 api:
   image:
-    tag: 705cd7aa
+    tag: ecb62045
