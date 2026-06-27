@@ -10,7 +10,7 @@ metadata:
   namespace: enterprise-platform
 spec:
   mtls:
-    mode: STRICT
+    mode: PERMISSIVE
     # STRICT → ALL traffic between services
     #          MUST use mTLS
     #          plain HTTP rejected
