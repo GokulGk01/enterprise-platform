@@ -24,7 +24,7 @@ services:
   frontend:
     image:
       repository: 884390772196.dkr.ecr.us-east-1.amazonaws.com/enterprise-platform/frontend
-      tag: 68a8e4c5
+      tag: 705cd7aa
       pullPolicy: Always
     replicas: 2
     port: 80
@@ -49,7 +49,7 @@ services:
   backend:
     image:
       repository: 884390772196.dkr.ecr.us-east-1.amazonaws.com/enterprise-platform/backend
-      tag: 68a8e4c5
+      tag: 705cd7aa
       pullPolicy: Always
     replicas: 2
     port: 8080
@@ -73,7 +73,7 @@ services:
   api:
     image:
       repository: 884390772196.dkr.ecr.us-east-1.amazonaws.com/enterprise-platform/api
-      tag: 68a8e4c5
+      tag: 705cd7aa
       pullPolicy: Always
     replicas: 2
     port: 9090
@@ -106,10 +106,10 @@ nameOverride: ""
 fullnameOverride: ""
 frontend:
   image:
-    tag: 7bcdd754
+    tag: 705cd7aa
 backend:
   image:
-    tag: 7bcdd754
+    tag: 705cd7aa
 api:
   image:
-    tag: 7bcdd754
+    tag: 705cd7aa
