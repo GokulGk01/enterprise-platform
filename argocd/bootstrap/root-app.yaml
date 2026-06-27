@@ -1,39 +1,26 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: enterprise-platform
+  name: root-app
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
-  labels:
-    app: enterprise-platform
-    managed-by: argocd
 spec:
-  project: enterprise-platform
-
+  project: default
   source:
     repoURL: https://github.com/GokulGK01/enterprise-platform.git
     targetRevision: main
-    path: helm/enterprise-platform
-    helm:
-      valueFiles:
-        - values.yaml
-        - values-dev.yaml
-
+    path: argocd/apps
+    directory:
+      recurse: true
+      include: "*.yaml"
   destination:
     server: https://kubernetes.default.svc
-    namespace: enterprise-platform
-
+    namespace: argocd
   syncPolicy:
     automated:
-      prune: true
+      prune: false
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
