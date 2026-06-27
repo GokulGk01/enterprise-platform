@@ -1,0 +1,31 @@
+# ============================================================
+# circuit-breaker.yaml
+# PURPOSE: Enhanced circuit breaker for backend service
+# ============================================================
+
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: backend-circuit-breaker
+  namespace: enterprise-platform
+spec:
+  host: enterprise-platform-backend
+  trafficPolicy:
+    outlierDetection:
+      consecutiveGatewayErrors: 3
+      # Stricter than default: eject after 3 errors
+      consecutive5xxErrors: 3
+      # Also eject after 3 5xx errors
+      interval: 10s
+      # Check more frequently (10s vs 30s)
+      baseEjectionTime: 60s
+      # Eject longer (60s vs 30s)
+      maxEjectionPercent: 100
+      # Allow ejecting ALL pods if all failing
+      # Forces fast failure instead of slow timeout
+    connectionPool:
+      http:
+        http1MaxPendingRequests: 10
+        # Very low pending limit
+        # Triggers circuit breaker quickly
+        # Fast failure is better than slow timeout
