@@ -207,27 +207,38 @@ jobs:
           sudo wget -qO /usr/local/bin/yq \
             https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
-          # Install yq on GitHub runner
-          # Not available by default on ubuntu-latest
 
       - name: Update Helm values with new image tags
         run: |
           SHORT_SHA="${GITHUB_SHA::8}"
-          yq -i ".frontend.image.tag = \"${SHORT_SHA}\"" \
+
+          # Update values.yaml (not values-dev.yaml)
+          # ArgoCD reads values.yaml first
+          yq -i ".services.frontend.image.tag = \"${SHORT_SHA}\"" \
             helm/enterprise-platform/values.yaml
-          yq -i ".backend.image.tag = \"${SHORT_SHA}\"" \
+          yq -i ".services.backend.image.tag = \"${SHORT_SHA}\"" \
             helm/enterprise-platform/values.yaml
-          yq -i ".api.image.tag = \"${SHORT_SHA}\"" \
+          yq -i ".services.api.image.tag = \"${SHORT_SHA}\"" \
             helm/enterprise-platform/values.yaml
+
+          echo "Updated image tags to: ${SHORT_SHA}"
+          cat helm/enterprise-platform/values.yaml | grep "tag:"
 
       - name: Commit and push GitOps changes
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add helm/enterprise-platform/values.yaml
-          git diff --staged --quiet || \
-            git commit -m "chore: update image tags to ${GITHUB_SHA::8}
+          git config user.name "GitHub Actions Bot"
+          git config user.email "bot@enterprise-platform.com"
 
-            Updated by CI pipeline run #${{ github.run_number }}
-            Triggered by: ${{ github.actor }}"
+          git add helm/enterprise-platform/values.yaml
+
+          # Only commit if something changed
+          git diff --staged --quiet || \
+            git commit -m "chore(gitops): update image tags to ${GITHUB_SHA::8} [skip ci]
+
+            Auto-updated by CI pipeline run #${{ github.run_number }}
+            Commit: ${{ github.sha }}
+            Actor: ${{ github.actor }}"
+
+          # Pull before push to avoid conflicts
+          git pull --rebase origin main
           git push origin main
