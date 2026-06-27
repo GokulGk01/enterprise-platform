@@ -14,6 +14,18 @@ type HealthResponse struct {
 	Service     string `json:"service"`
 }
 
+type InfoResponse struct {
+	Service string `json:"service"`
+	Version string `json:"version"`
+}
+
+func getEnv(key, defaultVal string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return defaultVal
+}
+
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	response := HealthResponse{
 		Status:      "healthy",
@@ -25,31 +37,24 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func getEnv(key, defaultVal string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
+func infoHandler(w http.ResponseWriter, r *http.Request) {
+	response := InfoResponse{
+		Service: "api",
+		Version: getEnv("APP_VERSION", "1.0.0"),
 	}
-	return defaultVal
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 func main() {
 	port := getEnv("PORT", "9090")
 
-	# Register ALL route variations
+	// Health check routes
 	http.HandleFunc("/health", healthHandler)
-	# Direct health check
-
 	http.HandleFunc("/v1/health", healthHandler)
-	# ALB routes /v1/* here
 
-	http.HandleFunc("/v1/info", func(w http.ResponseWriter, r *http.Request) {
-		response := map[string]string{
-			"service": "api",
-			"version": getEnv("APP_VERSION", "1.0.0"),
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
-	})
+	// Info routes
+	http.HandleFunc("/v1/info", infoHandler)
 
 	fmt.Printf("API server starting on port %s\n", port)
 	http.ListenAndServe(":"+port, nil)
