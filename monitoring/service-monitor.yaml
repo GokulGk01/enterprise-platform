@@ -1,0 +1,28 @@
+# ============================================================
+# service-monitor.yaml
+# PURPOSE: Tell Prometheus to scrape our apps
+# ============================================================
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: enterprise-platform
+  namespace: monitoring
+  labels:
+    release: prometheus
+    # Must match Prometheus serviceMonitorSelector
+spec:
+  namespaceSelector:
+    matchNames:
+      - enterprise-platform
+      # Scrape services in enterprise-platform namespace
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: enterprise-platform
+      # Match our app labels
+  endpoints:
+    - port: http
+      path: /health
+      interval: 15s
+      # Scrape /health every 15 seconds
+      # Returns metrics in Prometheus format

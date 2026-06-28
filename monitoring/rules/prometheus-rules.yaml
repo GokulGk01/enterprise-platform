@@ -1,0 +1,179 @@
+# ============================================================
+# monitoring/rules/prometheus-rules.yaml
+# PURPOSE: Custom alerting rules for our platform
+# ============================================================
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: enterprise-platform-rules
+  namespace: monitoring
+  labels:
+    release: prometheus
+    # release label → Prometheus Operator finds this rule
+    # must match Prometheus selector
+spec:
+  groups:
+    # ── Pod Health Rules ───────────────────────────────────
+    - name: pod.rules
+      interval: 30s
+      rules:
+        - alert: PodCrashLooping
+          expr: |
+            rate(kube_pod_container_status_restarts_total{
+              namespace="enterprise-platform"
+            }[5m]) * 60 > 0
+          for: 5m
+          # for → alert only if condition true for 5 minutes
+          # prevents flapping alerts
+          labels:
+            severity: critical
+            namespace: enterprise-platform
+          annotations:
+            summary: "Pod {{ $labels.pod }} is crash looping"
+            description: >
+              Pod {{ $labels.pod }} in namespace
+              {{ $labels.namespace }} is restarting
+              {{ $value }} times per minute
+
+        - alert: PodNotReady
+          expr: |
+            kube_pod_status_ready{
+              namespace="enterprise-platform",
+              condition="true"
+            } == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.pod }} not ready"
+            description: >
+              Pod {{ $labels.pod }} has been not ready
+              for more than 5 minutes
+
+    # ── Deployment Rules ───────────────────────────────────
+    - name: deployment.rules
+      rules:
+        - alert: DeploymentReplicasMismatch
+          expr: |
+            kube_deployment_spec_replicas{
+              namespace="enterprise-platform"
+            } !=
+            kube_deployment_status_available_replicas{
+              namespace="enterprise-platform"
+            }
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: >
+              Deployment {{ $labels.deployment }}
+              replica mismatch
+            description: >
+              Deployment {{ $labels.deployment }} has
+              {{ $value }} available replicas but
+              spec requires more
+
+        - alert: DeploymentUnavailable
+          expr: |
+            kube_deployment_status_available_replicas{
+              namespace="enterprise-platform"
+            } == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: >
+              Deployment {{ $labels.deployment }}
+              has no available replicas
+            description: >
+              All pods in deployment
+              {{ $labels.deployment }} are unavailable
+
+    # ── Resource Usage Rules ───────────────────────────────
+    - name: resource.rules
+      rules:
+        - alert: HighCPUUsage
+          expr: |
+            sum(rate(container_cpu_usage_seconds_total{
+              namespace="enterprise-platform",
+              container!=""
+            }[5m])) by (pod, container)
+            /
+            sum(kube_pod_container_resource_limits{
+              namespace="enterprise-platform",
+              resource="cpu"
+            }) by (pod, container)
+            * 100 > 80
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: >
+              High CPU usage on
+              {{ $labels.pod }}/{{ $labels.container }}
+            description: >
+              CPU usage is {{ $value }}% of limit
+
+        - alert: HighMemoryUsage
+          expr: |
+            sum(container_memory_working_set_bytes{
+              namespace="enterprise-platform",
+              container!=""
+            }) by (pod, container)
+            /
+            sum(kube_pod_container_resource_limits{
+              namespace="enterprise-platform",
+              resource="memory"
+            }) by (pod, container)
+            * 100 > 80
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: >
+              High memory usage on
+              {{ $labels.pod }}/{{ $labels.container }}
+            description: >
+              Memory usage is {{ $value }}% of limit
+
+    # ── SLO Rules ──────────────────────────────────────────
+    - name: slo.rules
+      rules:
+        - alert: ErrorRateTooHigh
+          expr: |
+            sum(rate(istio_requests_total{
+              destination_service_namespace="enterprise-platform",
+              response_code=~"5.."
+            }[5m]))
+            /
+            sum(rate(istio_requests_total{
+              destination_service_namespace="enterprise-platform"
+            }[5m]))
+            * 100 > 5
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Error rate above 5% SLO"
+            description: >
+              Error rate is {{ $value }}%
+              exceeding 5% SLO threshold
+
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(istio_request_duration_milliseconds_bucket{
+                destination_service_namespace="enterprise-platform"
+              }[5m])) by (le, destination_service_name)
+            ) > 1000
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: >
+              High latency on
+              {{ $labels.destination_service_name }}
+            description: >
+              P99 latency is {{ $value }}ms
+              exceeding 1000ms threshold

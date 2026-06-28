@@ -1,0 +1,215 @@
+# ============================================================
+# monitoring/values-prometheus.yaml
+# PURPOSE: kube-prometheus-stack configuration
+# ============================================================
+
+# ── Global Settings ────────────────────────────────────────
+fullnameOverride: prometheus
+# Shorter names in Kubernetes resources
+
+# ── Prometheus Settings ────────────────────────────────────
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    # retention → keep metrics for 15 days
+    # older data deleted automatically
+    # increase for compliance requirements
+
+    retentionSize: 10GB
+    # retentionSize → max storage for metrics
+    # deletes oldest data when exceeded
+
+    scrapeInterval: 15s
+    # scrapeInterval → collect metrics every 15 seconds
+    # lower = more data, more storage, more CPU
+    # 15s is standard for production
+
+    evaluationInterval: 15s
+    # evaluationInterval → check alert rules every 15s
+
+    # Allow Prometheus to scrape ALL namespaces
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    # These three settings allow Prometheus to find
+    # ServiceMonitors/PodMonitors/Rules in ANY namespace
+    # Without this → only finds monitors in same namespace
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp2
+          # gp2 → AWS EBS GP2 storage class
+          # provisioned by EBS CSI Driver (Module 3)
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
+              # 20GB for metrics storage
+              # adjust based on retention needs
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 400Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+    # Scrape Istio metrics
+    additionalScrapeConfigs:
+      - job_name: istio-mesh
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - enterprise-platform
+                - istio-system
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: istio-.*|enterprise-platform-.*
+        # Scrapes Istio envoy sidecar metrics
+        # Shows request rates, error rates, latency
+        # per service in Grafana
+
+# ── Grafana Settings ───────────────────────────────────────
+grafana:
+  enabled: true
+  adminPassword: "EnterpriseDevOps@2026"
+  # adminPassword → Grafana admin password
+  # Change this in production!
+  # Use Vault (Module 12) for secrets
+
+  persistence:
+    enabled: true
+    storageClassName: gp2
+    size: 5Gi
+    # Persist dashboards and settings
+    # Without this → dashboards lost on pod restart
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 200m
+      memory: 512Mi
+
+  # Pre-install useful dashboards
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: default
+          orgId: 1
+          folder: Enterprise Platform
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/default
+
+  dashboards:
+    default:
+      kubernetes-cluster:
+        gnetId: 7249
+        # Grafana.com dashboard ID 7249
+        # Kubernetes Cluster Overview
+        revision: 1
+        datasource: Prometheus
+
+      kubernetes-pods:
+        gnetId: 6336
+        # Pod monitoring dashboard
+        revision: 1
+        datasource: Prometheus
+
+      istio-mesh:
+        gnetId: 7639
+        # Istio mesh dashboard
+        revision: 1
+        datasource: Prometheus
+
+      istio-service:
+        gnetId: 7636
+        # Istio service dashboard
+        revision: 1
+        datasource: Prometheus
+
+      node-exporter:
+        gnetId: 1860
+        # Node Exporter Full dashboard
+        # CPU, Memory, Disk, Network per node
+        revision: 31
+        datasource: Prometheus
+
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/"
+    auth.anonymous:
+      enabled: false
+      # Require login to view dashboards
+    users:
+      allow_sign_up: false
+      # Prevent self-registration
+
+# ── AlertManager Settings ──────────────────────────────────
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp2
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 100Mi
+      limits:
+        cpu: 100m
+        memory: 256Mi
+
+# ── Node Exporter ──────────────────────────────────────────
+nodeExporter:
+  enabled: true
+  # Runs as DaemonSet on every node
+  # Collects: CPU, memory, disk, network per node
+
+# ── Kube State Metrics ─────────────────────────────────────
+kubeStateMetrics:
+  enabled: true
+  # Collects: pod status, deployment replicas,
+  # resource requests/limits, node conditions
+
+# ── Default Alerting Rules ─────────────────────────────────
+defaultRules:
+  create: true
+  rules:
+    alertmanager: true
+    etcd: false
+    # etcd not accessible on EKS (managed)
+    configReloaders: true
+    general: true
+    k8s: true
+    kubeApiserverAvailability: true
+    kubeApiserverBurnrate: true
+    kubeApiserverHistogram: true
+    kubeApiserverSlos: true
+    kubelet: true
+    kubeProxy: false
+    # kube-proxy rules not needed with VPC CNI
+    kubeSchedulerAlerting: false
+    # Scheduler not accessible on EKS
+    kubeStateMetrics: true
+    network: true
+    node: true
+    nodeExporterAlerting: true
+    nodeExporterRecording: true
+    prometheus: true
+    prometheusOperator: true

@@ -1,0 +1,98 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 55.5.0
+    helm:
+      valueFiles: []
+      values: |
+        fullnameOverride: prometheus
+        prometheus:
+          prometheusSpec:
+            retention: 15d
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: gp2
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 20Gi
+            podMonitorSelectorNilUsesHelmValues: false
+            serviceMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            resources:
+              requests:
+                cpu: 200m
+                memory: 400Mi
+              limits:
+                cpu: 500m
+                memory: 1Gi
+        grafana:
+          enabled: true
+          adminPassword: "EnterpriseDevOps@2026"
+          persistence:
+            enabled: true
+            storageClassName: gp2
+            size: 5Gi
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 200m
+              memory: 512Mi
+          dashboards:
+            default:
+              kubernetes-cluster:
+                gnetId: 7249
+                revision: 1
+                datasource: Prometheus
+              node-exporter:
+                gnetId: 1860
+                revision: 31
+                datasource: Prometheus
+              istio-mesh:
+                gnetId: 7639
+                revision: 1
+                datasource: Prometheus
+        alertmanager:
+          enabled: true
+          alertmanagerSpec:
+            storage:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: gp2
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 5Gi
+        nodeExporter:
+          enabled: true
+        kubeStateMetrics:
+          enabled: true
+        defaultRules:
+          create: true
+          rules:
+            etcd: false
+            kubeProxy: false
+            kubeSchedulerAlerting: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - Replace=true

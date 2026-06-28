@@ -1,0 +1,64 @@
+# ============================================================
+# monitoring/alerts/alertmanager-config.yaml
+# PURPOSE: Where to send alerts
+# ============================================================
+
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: enterprise-platform-alerts
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  route:
+    receiver: default-receiver
+    groupBy:
+      - alertname
+      - namespace
+      # Group related alerts together
+      # Prevents alert storm (one issue = one notification)
+    groupWait: 30s
+    # groupWait → wait 30s for more alerts before sending
+    groupInterval: 5m
+    # groupInterval → send updates every 5 minutes
+    repeatInterval: 4h
+    # repeatInterval → resend if still firing after 4 hours
+    routes:
+      - receiver: critical-receiver
+        matchers:
+          - name: severity
+            value: critical
+        # critical alerts → separate receiver
+        # could be PagerDuty or dedicated Slack channel
+
+  receivers:
+    - name: default-receiver
+      slackConfigs:
+        - apiURL: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+          # Replace with real Slack webhook URL
+          channel: "#alerts"
+          title: >
+            [{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}
+          text: >
+            {{ range .Alerts }}
+            *Alert:* {{ .Labels.alertname }}
+            *Severity:* {{ .Labels.severity }}
+            *Description:* {{ .Annotations.description }}
+            {{ end }}
+          sendResolved: true
+          # sendResolved → notify when alert clears
+
+    - name: critical-receiver
+      slackConfigs:
+        - apiURL: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+          channel: "#critical-alerts"
+          title: >
+            🚨 CRITICAL: {{ .CommonLabels.alertname }}
+          text: >
+            {{ range .Alerts }}
+            *Alert:* {{ .Labels.alertname }}
+            *Namespace:* {{ .Labels.namespace }}
+            *Description:* {{ .Annotations.description }}
+            {{ end }}
+          sendResolved: true
