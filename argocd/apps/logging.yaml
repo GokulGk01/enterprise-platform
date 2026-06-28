@@ -1,0 +1,113 @@
+# ============================================================
+# argocd/apps/logging.yaml
+# PURPOSE: ArgoCD Application for logging stack
+# ============================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki
+    targetRevision: 5.41.4
+    helm:
+      valueFiles: []
+      values: |
+        loki:
+          commonConfig:
+            replication_factor: 1
+          storage:
+            type: filesystem
+          schemaConfig:
+            configs:
+              - from: "2024-01-01"
+                store: tsdb
+                object_store: filesystem
+                schema: v13
+                index:
+                  prefix: loki_index_
+                  period: 24h
+          limits_config:
+            retention_period: 720h
+            ingestion_rate_mb: 16
+            ingestion_burst_size_mb: 32
+        singleBinary:
+          replicas: 1
+          persistence:
+            storageClass: gp2
+            size: 20Gi
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+        backend:
+          replicas: 0
+        read:
+          replicas: 0
+        write:
+          replicas: 0
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: promtail
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: promtail
+    targetRevision: 6.15.3
+    helm:
+      values: |
+        config:
+          clients:
+            - url: http://loki-gateway.logging.svc.cluster.local/loki/api/v1/push
+              tenant_id: default
+              backoff_config:
+                min_period: 500ms
+                max_period: 5m
+                max_retries: 10
+        tolerations:
+          - operator: Exists
+            effect: NoSchedule
+          - operator: Exists
+            effect: NoExecute
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

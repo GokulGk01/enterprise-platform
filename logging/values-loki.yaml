@@ -1,0 +1,80 @@
+# ============================================================
+# logging/values-loki.yaml
+# PURPOSE: Loki log aggregation configuration
+# ============================================================
+
+loki:
+  enabled: true
+  commonConfig:
+    replication_factor: 1
+    # replication_factor: 1 → single instance
+    # Production: 3 for HA
+    # Learning: 1 saves resources
+
+  storage:
+    type: filesystem
+    # filesystem → store logs on local disk
+    # Production: s3 (much cheaper, more durable)
+    # Learning: filesystem (simpler setup)
+
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        # tsdb → time series database for index
+        object_store: filesystem
+        schema: v13
+        # v13 → latest Loki schema version
+        index:
+          prefix: loki_index_
+          period: 24h
+          # period: 24h → new index file every day
+          # keeps index manageable size
+
+  limits_config:
+    retention_period: 720h
+    # retention_period → keep logs for 30 days (720 hours)
+    # older logs automatically deleted
+    ingestion_rate_mb: 16
+    # ingestion_rate_mb → max 16MB/s ingestion rate
+    ingestion_burst_size_mb: 32
+    # burst up to 32MB/s temporarily
+    max_query_series: 5000
+    # max_query_series → limit expensive queries
+
+  rulerConfig:
+    storage:
+      type: local
+      local:
+        directory: /rules
+    rule_path: /rules/fake
+    enable_api: true
+    # Enable Loki ruler for log-based alerts
+
+singleBinary:
+  replicas: 1
+  # Single binary mode → all Loki components in one pod
+  # Simpler for learning
+  # Production: microservices mode (separate components)
+
+  persistence:
+    storageClass: gp2
+    size: 20Gi
+    # 20GB for log storage
+    # Adjust based on log volume and retention
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# Disable components we don't need in learning env
+backend:
+  replicas: 0
+read:
+  replicas: 0
+write:
+  replicas: 0

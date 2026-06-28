@@ -1,0 +1,120 @@
+# ============================================================
+# logging/values-promtail.yaml
+# PURPOSE: Promtail log collector configuration
+# Runs as DaemonSet on every node
+# ============================================================
+
+config:
+  # Loki endpoint to ship logs to
+  clients:
+    - url: http://loki-gateway.logging.svc.cluster.local/loki/api/v1/push
+      # loki-gateway → Loki service in logging namespace
+      # /loki/api/v1/push → Loki push endpoint
+      tenant_id: default
+      # tenant_id → Loki multi-tenancy
+      # default → single tenant (learning)
+      backoff_config:
+        min_period: 500ms
+        max_period: 5m
+        max_retries: 10
+        # Retry log shipping if Loki unavailable
+        # prevents log loss on network hiccups
+
+  # What to collect and how to label it
+  snippets:
+    pipelineStages:
+      - cri: {}
+        # cri → parse CRI (containerd) log format
+        # Kubernetes logs use containerd format:
+        # 2024-01-01T00:00:00Z stdout F <message>
+
+      - labeldrop:
+          - filename
+          # Drop filename label (too high cardinality)
+          # High cardinality = too many unique values
+          # Slows down Loki queries
+
+    scrapeConfigs:
+      - job_name: kubernetes-pods
+        pipeline_stages:
+          - cri: {}
+          - json:
+              expressions:
+                level: level
+                msg: msg
+                # Parse JSON logs if apps emit JSON
+                # Extracts level and message fields
+          - labels:
+              level:
+              # Add log level as Loki label
+              # Enables filtering by level in Grafana
+
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels:
+              - __meta_kubernetes_pod_node_name
+            target_label: __host__
+
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+            # Copy ALL pod labels to Loki labels
+            # Enables filtering by app, version etc
+
+          - action: replace
+            replacement: $1
+            separator: /
+            source_labels:
+              - __meta_kubernetes_namespace
+              - __meta_kubernetes_pod_name
+            target_label: job
+            # job label = namespace/pod-name
+            # Used for grouping in Grafana
+
+          - action: replace
+            source_labels:
+              - __meta_kubernetes_namespace
+            target_label: namespace
+            # namespace label → filter by namespace
+
+          - action: replace
+            source_labels:
+              - __meta_kubernetes_pod_name
+            target_label: pod
+            # pod label → filter by pod name
+
+          - action: replace
+            source_labels:
+              - __meta_kubernetes_pod_container_name
+            target_label: container
+            # container label → filter by container
+
+          - replacement: /var/log/pods/*$1/*.log
+            separator: /
+            source_labels:
+              - __meta_kubernetes_pod_uid
+              - __meta_kubernetes_pod_container_name
+            target_label: __path__
+            # __path__ → actual file path to read logs from
+
+# DaemonSet tolerations
+tolerations:
+  - key: node-role.kubernetes.io/master
+    operator: Exists
+    effect: NoSchedule
+  - operator: Exists
+    effect: NoExecute
+  - operator: Exists
+    effect: NoSchedule
+  # Tolerate all taints → runs on ALL nodes
+  # Including system/master nodes
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  # Keep Promtail lightweight
+  # It runs on every node so efficiency matters
